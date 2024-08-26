@@ -1,0 +1,369 @@
+---
+# title: "Mesa de Procesamiento REP"
+# author: "Febrero 2024"
+format:
+  revealjs:
+    auto-stretch: false
+    margin: 0
+    slide-number: true
+    scrollable: true
+    preview-links: auto
+    logo: imagenes/logo_portada2.png
+    css: ine_quarto_styles.css
+    # footer: <https://quarto.org>
+---
+
+```{r librerias}
+#| echo: FALSE
+#| output: FALSE
+#| eval: TRUE
+library(dplyr)
+library(targets)
+library(kableExtra)
+library(arrow)
+library(janitor)
+library(stringr)
+library(ggplot2)
+
+arrow::set_cpu_count(2)
+options(arrow.use_threads = TRUE)
+```
+
+```{r, setup, include=FALSE}
+knitr::opts_knit$set(root.dir = '~/PCD/rep2/')
+```
+
+#
+
+<!---
+# TODO: this does not work
+.linea-superior[]
+.linea-inferior[] 
+--->
+
+<!---
+# TODO: this does not work
+![](imagenes/logo_portada2.png){.center style="width: 20%;"}   
+--->
+
+[]{.linea-superior} 
+[]{.linea-inferior} 
+
+<!---
+<img src="imagenes/logo_portada2.png" style="width: 20%"/>  
+--->
+
+<img src="imagenes/logo_portada2.png" width="20%"/>  
+
+[**Proyecto Estratégico Registro Estadístico de Población (REP)**]{.big-par .center-justified}
+
+[**Agosto 2024**]{.big-par .center-justified}
+
+## Introducción 
+
+<!---
+## PE Servicios Compartidos  
+--->
+
+. . .
+
+::: {.incremental .medium-par}
+
+**Objetivo del REP:**
+
+:::
+
+. . . 
+
+[*"Compilar datos de la población permitiendo su conteo, localización y caracterización demográfica básica. Este permitirá brindar acceso a datos poblacionales desagregados, oportunos y de calidad, derivando en la disminución de costos asociados al levantamiento de datos. Además, la instalación del REP permitirá reducir las cargas en entrevistadores e informantes, entre otros beneficios.".*]{.medium-par}
+
+
+
+## Introducción
+
+::: {.incremental .medium-par}
+
+- La construcción del REP se basa en el acceso a Registros Administrativos (RRAA).
+
+- Actualmente contamos con tres RRAA nominados:
+
+  - **Servicio de Registro Civil e Identificación (SRCeI)**: 
+  
+    - Base amplia de información que incluye datos de identificación, caracterización demográfica (sexo, nacionalidad, fecha de nacimiento, fecha de defunción, estado civil, entre otros) y localización. 
+    
+    - La información del SRCeI se considera el punto de partida crucial para el REP.
+  
+  - **Fondo Nacional de Salud (FONASA)**:
+  
+    - El registro de FONASA es particularmente relevante para el proyecto REP dado que al contener información sobre los beneficiarios de la salud pública, abarca un universo de más de 15 millones de personas por mes. 
+
+    - Este registro no solo incluye personas con un RUN otorgado por el SRCeI, sino que puede contener personas a quienes aún no se les haya otorgado este identificador. 
+  
+  - **Superintendencia de Seguridad Social (SUSESO)**:
+  
+    - Recopila antecedentes de varios temas, como de los trabajadores protegidos, cotizantes, pensionados y empresas
+
+    - En el marco del REP, la tabla más relevante en la exploración es A01: **Trabajadores protegidos**, la que contiene el detalle de los antecedentes generales de todos los trabajadores cubiertos por dicho organismo administrador.
+
+
+:::
+
+
+## Procesamiento
+
+::: {.incremental .medium-par}
+
+1. Descarga ⏳
+
+2. Deduplicación ✂️
+
+3. Obtener señales de vida 👋
+
+4. Vinculación de las bases 🔗
+
+5. Limpieza 🧹
+
+6. Construcción de variables relevantes: estado y condición de residencia 🛠️
+
+7. Conteos finales 👨‍👩‍👧‍👦
+
+:::
+
+## Herramientas
+
+::: {.incremental  layout-ncol=3}
+
+![](imagenes/logo.svg){width=200}
+
+![](imagenes/arrow-logo_hex_black-txt_white-bg.png){width=200}
+
+![](imagenes/duckdb.png){width=200}
+
+:::
+
+## Herramientas: Targets 🎯
+
+::: {.incremental .medium-par}
+
+- Targets es un paquete de gestión de flujos de trabajo para el lenguaje de programación R. 
+
+- Targets acelera el análisis con computación paralela fácil de configurar, mejora la reproducibilidad y reduce la carga de cálculos repetidos y la micromanipulación manual de datos.
+
+- Evita tener que...
+
+  - Inciar el código 
+  
+  - Esperar mientras corre
+  
+  - Descubrir un problema
+  
+  - Reiniciar desde cero 😱
+  
+- Veamos un ejemplo
+
+:::
+
+::: notes
+
+- En este ejemplo se hace análisis breve para establecer la relación entre el ozono y la temperatura.
+
+- Para utilizar targets es necesario tener el script llamado _targets. En este script es donde vamos a configurar a describir el pipeline
+
+- Es necesario llamar el paquete targets al comienzo del script
+
+- En tar_option_set definimos los paquetes que se van a usar, entre otras configuraciones como el formato de almacenamiento, computación paralela, etc
+
+- Luego es necesario cargar las funciones que se van a utilizar. Esto se puede hacer con tar_source() si la carpeta donde están las funciones se llama R o con un list.files y luego aplicar un source de la manera tradicional
+
+- Luego definimos el pipeline que es una lista de targets donde cada target es un paso en el análisis
+
+- Cada target tiene un nombre y se crean usando la función tar_target
+
+- En el target file declaramos format = "file" para decirle a targets que ese target es un archivo externo y debería actualizarse si el contenido del archvio cambia 
+
+- Vemos que los argumentos de las funciones son el nombre de los otros targets.
+
+- Podemos correr tar_manifest para ver que los targets están correctos
+
+- Luego podemos ver el gráfico de dependencia del pipeline con tar_visnetwork. Si existen muchos targets esta función puede correr lento.
+
+- Finalmente, podemos correr el pipeline usando tar_make() que corre todos los targets en orden y guarda los resultados en la carpeta _targets/objects.
+
+- Podemos acceder a los resultados usando tar_read()
+
+- Si corro tar_make() de nuevo y nada cambia targets se salta todo
+
+- Si quiero hacer un cambio en alguna función intermedia, targets va a correr solamente los targets que están conectados con esa función
+
+
+:::
+
+## Herramientas: Arrow 🏹
+
+::: {.incremental .medium-par}
+
+- El paquete Arrow en R es parte del ecosistema Apache Arrow, una plataforma de desarrollo para la gestión de datos en memoria que está diseñada para ser altamente eficiente en términos de rendimiento y compatibilidad entre diferentes lenguajes de programación.
+
+- Arrow permite...
+
+  - Manipulación eficiente de datos en memoria
+
+  - Lectura y escritura de formatos de datos eficientes
+
+  - Consulta y filtrado eficiente de datos
+  
+  - Pasar datos hacia y desde DuckDB
+
+:::
+
+. . . 
+
+```{r}
+#| echo: true
+#| eval: false
+data <- data %>% 
+  to_duckdb() %>% 
+  slice_sample(n = 1, by = run_dv) %>% 
+  to_arrow() %>% 
+  compute()
+```
+
+
+## Herramientas: DuckDB 🦆
+
+::: {.incremental .medium-par}
+
+- DuckDB es un motor de base de datos analítico rápido y liviano que está diseñado para funcionar con varios lenguajes de programación, incluido R. 
+
+- Está diseñado para ser utilizado directamente desde el código, sin necesidad de instalar un servidor de base de datos independiente.
+
+- Permite ejecutar consultas sobre conjuntos de datos que no caben en la memoria utilizando herramientas familiares de análisis de datos.
+
+- Veamos un ejemplo:
+
+:::
+
+## Herramientas: DuckDB 🦆
+
+```{r}
+#| echo: true
+#| eval: false
+deduplicate_rc_by_name_dob <- function(data) {
+  
+  print("Cargar datos...")
+  
+  data <- as_arrow_table(data)
+  
+  # Crear conexión DB
+  con <- dbConnect(duckdb::duckdb(), dbdir = "data/edited/rep.db", read_only = FALSE)
+  
+  # Registrar el objeto Arrow como una tabla virtual y crear la tabla DuckDb de esta tabla
+  arrow::to_duckdb(data, table_name = "rc_deduplicated_by_run", con = con)
+  
+  dbSendQuery(con, "CREATE TABLE rc_deduplicated_by_run AS SELECT * FROM rc_deduplicated_by_run")
+  
+  rm(data)
+  
+  data <- tbl(con, "rc_deduplicated_by_run")
+  
+  print("Deduplicar...")
+  
+  data <- data %>% 
+    group_by(nombre_paste_rc, fecha_nac_rc) %>% 
+    slice_max(run_dv) %>% 
+    ungroup() %>% 
+    compute()
+  
+  data <- data %>% to_arrow()
+  data <- data %>% as_arrow_table()
+  
+  dbDisconnect(con)
+  
+  file.remove("data/edited/rep.db")
+  
+  data
+  
+}
+```
+
+::: notes
+- Esta es una función utilizada para deduplicar el RC usando el nombre y la fecha de nacimiento
+
+- El primer paso es cargar la base del RC y convertirla en una tabla arrow
+
+- Para utilizar DuckDB, primero hay que crear un objeto de conexión que represente la base de datos. El objeto de conexión toma como parámetro el archivo de base de datos para leer y escribir. Si el archivo de base de datos no existe, se creará (la extensión del archivo puede ser .db, .duckdb o cualquier otra).
+
+- Luego guardamos el objeto Arrow como una tabla virtual DuckDB, dándole un nombre que será utilizado en la consulta SQL, finalmente ejecutamos la consulta para crear al tabla.
+:::
+
+## Conteos finales 👨‍👩‍👧‍👦
+
+::: {.incremental .medium-par}
+
+- Todo muy interesante pero...
+
+- Cuántos somos?! 😱
+
+- Depende... 🤔
+
+:::
+
+. . . 
+
+::: {.incremental .medium-par}
+
+```{r tbl10}
+tbl10 <- read_parquet("presentations/presentacion-rep-interna/tablas/tbl10.parquet")
+tbl10 %>% kbl()
+```
+
+:::
+
+::: notes
+
+- Una persona se clasifica como "viva" si no tiene fecha de defunción, no es outlier y tiene un run válido.
+
+- Una persona se clasifica como "muerta" si tiene fecha de defunción, si no tiene fecha de defunción pero es outlier o si no tiene fecha de defunción pero tiene un run inválido.
+
+- Finalmente, una persona se clasifica como "incierta" cuando no hizo match con el RC y cuando no tiene señales de vida en suseso o en fonasa
+
+:::
+
+## Conteos finales 👨‍👩‍👧‍👦
+
+:::: {layout-ncol=2}
+
+::: {.fragment .small-par .center}
+ 
+```{r tbl11}
+#| tbl-cap: Vivos activos
+tbl11 <- read_parquet("presentations/presentacion-rep-demografia/tablas/tbl11.parquet")
+tbl11 %>% kbl()
+```
+::: 
+
+::: {.fragment .small-par .center}
+```{r tbl12}
+#| tbl-cap: Vivos activos más sin señal
+tbl12 <- read_parquet("presentations/presentacion-rep-demografia/tablas/tbl12.parquet")
+tbl12 %>% kbl()
+```
+
+:::
+
+
+::: {.fragment .small-par .center}
+ 
+![Vivos activos](imagenes/edad_sexo_plot_1.png)
+
+::: 
+
+::: {.fragment .small-par .center}
+
+![Vivos activos más sin señal](imagenes/edad_sexo_plot_2.png)
+
+:::
+
+
+::::
+
